@@ -1,0 +1,370 @@
+% ============================================================
+% PI-SSL Paper
+% Physics-Informed Self-Supervised Learning for
+% Cross-Domain Wi-Fi Gesture Recognition
+%
+% COMPLETE SECTIONS (backed by verified code output):
+%   Section 3 — Dataset and Preprocessing
+%   Section 4.1 — Experimental Setup
+%
+% PLACEHOLDER SECTIONS (filled once results exist):
+%   Section 1 — Introduction
+%   Section 2 — Related Work
+%   Section 4.2+ — Results, Ablation
+%   Section 5 — Conclusion
+%
+% Template: IEEEtran (journal mode)
+% Compile:  pdflatex pi_ssl_paper.tex
+% ============================================================
+
+\documentclass[journal]{IEEEtran}
+
+% ── Packages ─────────────────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{cite}
+\usepackage{array}
+\usepackage{tabularx}
+
+% ── Convenience macros ────────────────────────────────────────────────────────
+\newcommand{\bvp}{\mathbf{X}}
+\newcommand{\R}{\mathbb{R}}
+
+% =============================================================================
+\begin{document}
+% =============================================================================
+
+\title{Physics-Informed Self-Supervised Learning for\\
+Cross-Domain Wi-Fi Gesture Recognition}
+
+\author{Ghulam~Fatima,~\IEEEmembership{Student Member,~IEEE,}
+        and~Zahid~Halim,~\IEEEmembership{Member,~IEEE}%
+\thanks{G.~Fatima and Z.~Halim are with the Department of Information
+Management, National Yunlin University of Science and Technology (YunTech),
+Yunlin 640, Taiwan (e-mail: D11423005@yuntech.edu.tw).}}
+
+\maketitle
+
+% =============================================================================
+% ABSTRACT  (placeholder — fill once results are known)
+% =============================================================================
+\begin{abstract}
+[To be completed after experiments.]
+Wi-Fi-based gesture recognition has emerged as a promising contactless
+sensing modality, yet existing methods generalise poorly across physical
+environments due to domain shift in channel conditions.
+We propose PI-SSL, a physics-informed self-supervised learning framework
+that leverages the domain-invariant structure of Body-coordinate Velocity
+Profiles (BVP) as a self-supervisory signal.
+Under a 3-fold Leave-One-Room-Out evaluation on Widar3.0 using only 25\%
+labeled data, PI-SSL achieves [X.X\%] mean accuracy, surpassing the
+fully-supervised Widar3.0 TPAMI baseline (89.7\%) that uses 100\% labels.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Wi-Fi sensing, gesture recognition, self-supervised learning,
+cross-domain generalisation, Body-coordinate Velocity Profile.
+\end{IEEEkeywords}
+
+% =============================================================================
+\section{Introduction}
+\label{sec:intro}
+% =============================================================================
+
+[To be completed.]
+
+% =============================================================================
+\section{Related Work}
+\label{sec:related}
+% =============================================================================
+
+[To be completed.]
+
+% =============================================================================
+\section{Dataset and Preprocessing}
+\label{sec:dataset}
+% =============================================================================
+
+\subsection{Widar3.0 BVP Dataset}
+\label{sec:dataset:overview}
+
+We evaluate on the publicly released Widar3.0
+dataset~\cite{zheng2019widar3}, which provides Body-coordinate Velocity
+Profile (BVP) signals collected across multiple physical environments
+using commodity Wi-Fi hardware.
+Each BVP sample is derived from Channel State Information (CSI)
+measurements by applying a domain transformation that expresses hand
+motion as a velocity profile in a coordinate system fixed to the human
+body, partially decoupling the signal from the specific
+transmitter--receiver geometry of the recording environment.
+
+The dataset comprises recordings across \textbf{14 session environments}
+spanning three distinct physical rooms: a \emph{Classroom}
+(Room~1, 5~sessions), a \emph{Hall} (Room~2, 8~sessions), and an
+\emph{Office} (Room~3, 1~session).
+Seventeen participants (user1--user17) performed gesture sequences across
+these sessions.
+After filename parsing and gesture label resolution
+(Section~\ref{sec:dataset:labels}), we obtain \textbf{43,158 usable
+files}; 500 files are discarded because they belong to users whose
+gesture mappings are absent from the official dataset documentation for
+three partially-recorded environments.
+
+\subsubsection*{File format}
+Each \texttt{.mat} file stores one gesture instance as a three-dimensional
+array \texttt{velocity\_spectrum\_ro} $\in \R^{20 \times 20 \times T}$,
+where the first axis indexes Doppler-velocity bins, the second indexes
+spatial/angle bins, and $T \in [0,\,38]$ is the number of recorded time
+frames.
+The filename encodes per-sample metadata in the format:
+\begin{equation*}
+  \texttt{\{user\}-\{gesture\}-\{torso\}-\{face\}-\{rep\}-[\ldots]-L\{link\}.mat}
+\end{equation*}
+where \texttt{gesture} is a local integer label whose semantic meaning
+is session-specific (Section~\ref{sec:dataset:labels}).
+
+% ── Gesture label resolution ─────────────────────────────────────────────────
+\subsection{Gesture Label Resolution}
+\label{sec:dataset:labels}
+
+A critical property of Widar3.0 that is underemphasised in prior work is
+that the gesture integers embedded in filenames are \emph{local to each
+recording session}: the same integer maps to different semantic classes
+across environments.
+For example, local label~\texttt{1} encodes \textsc{Push\&Pull} in the
+20181109-VS session but \textsc{Draw-1} (digit) in 20181112-VS.
+Treating raw filename integers as global class labels introduces spurious
+cross-environment label noise and inflates the apparent number of classes.
+
+We resolve every local label to a global semantic name using the complete
+per-environment, per-user mapping published in the official Widar3.0
+README, yielding \textbf{21 unique semantic gesture classes}.
+The digit gesture \textsc{Draw-0} is absent from all recorded sessions.
+Table~\ref{tab:gestures} lists the full class inventory and the per-class
+sample count after preprocessing.
+Only four of the fourteen environments contain all six standard benchmark
+gestures; these four environments are the sole contributors to the
+supervised training and test sets.
+
+\begin{table}[t]
+  \centering
+  \caption{Semantic gesture classes in Widar3.0 and sample counts after
+           preprocessing. Standard benchmark gestures are marked
+           ($\star$).}
+  \label{tab:gestures}
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabular}{@{}llr@{}}
+    \toprule
+    \textbf{Group} & \textbf{Gesture} & \textbf{Samples} \\
+    \midrule
+    \multirow{6}{*}{Benchmark$^\star$}
+      & Push\&Pull$^\star$    & 4{,}297 \\
+      & Sweep$^\star$         & 4{,}174 \\
+      & Clap$^\star$          & 4{,}170 \\
+      & Slide$^\star$         & 4{,}875 \\
+      & Draw-O-H$^\star$      & 3{,}748 \\
+      & Draw-Zigzag-H$^\star$ & 3{,}750 \\
+    \midrule
+    \multirow{6}{*}{Extended}
+      & Draw-N-H         & 3{,}124 \\
+      & Draw-Triangle-H  & 2{,}999 \\
+      & Draw-Rectangle-H & 3{,}000 \\
+      & Draw-O-V         &    675  \\
+      & Draw-Zigzag-V    & 1{,}925 \\
+      & Draw-N-V         & 1{,}923 \\
+    \midrule
+    \multirow{9}{*}{Digit}
+      & Draw-1 &   500 \\
+      & Draw-2 &   500 \\
+      & Draw-3 &   500 \\
+      & Draw-4 &   500 \\
+      & Draw-5 &   500 \\
+      & Draw-6 &   492 \\
+      & Draw-7 &   500 \\
+      & Draw-8 &   500 \\
+      & Draw-9 &   500 \\
+    \midrule
+    \multicolumn{2}{@{}l}{\textbf{Total}} & \textbf{43{,}152} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ── Preprocessing ─────────────────────────────────────────────────────────────
+\subsection{Preprocessing}
+\label{sec:dataset:preprocessing}
+
+\subsubsection*{Per-sample normalisation}
+BVP signal amplitude varies substantially across physical environments
+due to differences in room geometry, path loss, and receiver placement.
+To remove this environment-level offset and encourage the SSL encoder to
+learn gesture kinematics rather than absolute signal strength, we apply
+per-sample z-score normalisation to every BVP volume before any other
+operation:
+\begin{equation}
+  \hat{\bvp} =
+    \frac{\bvp - \mu(\bvp)}{\sigma(\bvp) + \varepsilon},
+  \qquad \varepsilon = 10^{-6},
+  \label{eq:zscore}
+\end{equation}
+where $\bvp \in \R^{20 \times 20 \times T}$ is the raw BVP array and
+$\mu(\cdot)$, $\sigma(\cdot)$ denote the mean and standard deviation
+computed over all elements of the volume.
+Normalisation is applied \emph{before} temporal padding so that the
+appended zeros retain the semantic of ``no signal'' and do not
+participate in the sample statistics.
+
+\subsubsection*{Temporal alignment}
+The time dimension $T$ ranges from 0 to 38 across files, reflecting
+variation in gesture duration and recording length.
+We adopt $T^{*} = 20$ as the canonical sequence length, matching the
+mode of the empirical distribution.
+Samples with $T > T^{*}$ are truncated to the first $T^{*}$ frames,
+retaining the peak of the gesture trajectory; samples with $T < T^{*}$
+are zero-padded on the right.
+Six files with $T = 0$ or corrupted array dimensionality are excluded,
+yielding a final dataset of \textbf{43,152 samples}, each of shape
+$20 \times 20 \times 20$.
+
+The preprocessed dataset is stored as a single compressed
+\texttt{.npz} archive (159.6\,MB on disk), eliminating per-sample
+\texttt{.mat} parsing overhead during GPU training and ensuring full
+reproducibility of all splits.
+
+% =============================================================================
+\section{Experiments}
+\label{sec:experiments}
+% =============================================================================
+
+\subsection{Experimental Setup}
+\label{sec:experiments:setup}
+
+\subsubsection*{Evaluation protocol}
+We follow the Leave-One-Room-Out (LORO) cross-validation protocol
+introduced by Zheng~\textit{et al.}~\cite{zheng2019widar3}, which is
+the standard benchmark for cross-environment Wi-Fi gesture recognition.
+In each of three folds, one physical room is withheld entirely as the
+test domain and the remaining two rooms form the training domain.
+No environment seen during training appears in evaluation, providing a
+stringent measure of cross-domain generalisation.
+Evaluation is restricted to the six standard benchmark gestures
+(\textsc{Push\&Pull}, \textsc{Sweep}, \textsc{Clap}, \textsc{Slide},
+\textsc{Draw-O-H}, \textsc{Draw-Zigzag-H}) to enable direct numerical
+comparison with all published results on this dataset.
+
+\subsubsection*{Semi-supervised split}
+We simulate a low-annotation setting by using \textbf{25\%} of the
+standard-6 training files as the labeled set for supervised fine-tuning.
+The split is stratified by gesture class so every class contributes a
+proportional number of labeled examples (minimum one per class).
+The remaining 75\% of standard-6 training files is treated as unlabeled
+and may be used for consistency-based auxiliary losses.
+SSL pre-training uses \emph{all} files from the training rooms across
+all 21 gesture classes (labels ignored), maximising the volume of Wi-Fi
+signal available to the representation encoder.
+
+Table~\ref{tab:splits} reports the exact file counts for each fold.
+
+\begin{table}[t]
+  \centering
+  \caption{Dataset split sizes per LORO fold. SSL pre-train uses all
+           gesture classes; labeled and unlabeled sets contain
+           standard-6 gestures only.}
+  \label{tab:splits}
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabular}{@{}clrrrr@{}}
+    \toprule
+    \textbf{Fold} & \textbf{Test Room} &
+    \textbf{SSL Pre-train} & \textbf{Labeled} &
+    \textbf{Unlabeled} & \textbf{Test} \\
+    \midrule
+    0 & Office    & 40{,}157 & 5{,}505 & 16{,}514 &  2{,}995 \\
+    1 & Classroom & 11{,}744 & 2{,}155 &  6{,}464 & 16{,}398 \\
+    2 & Hall      & 34{,}410 & 4{,}849 & 14{,}545 &  5{,}623 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection*{Metric}
+Performance is reported as mean per-fold classification accuracy
+averaged across all three folds, with standard deviation.
+The target is ${>}89.5\%$ mean accuracy, exceeding the Widar3.0 TPAMI
+baseline of $89.7\%$~\cite{zheng2019widar3} under identical evaluation
+conditions while using only 25\% of the available labels.
+
+\subsubsection*{Baselines}
+We compare PI-SSL against three published systems:
+
+\begin{itemize}
+
+  \item \textbf{Widar3.0}~\cite{zheng2019widar3}: BVP features with an
+  SVM classifier trained on 100\% labeled data under the identical LORO
+  protocol and standard-6 gesture set.
+  Reported mean accuracy: \textbf{89.7\%}.
+  This is the primary baseline; PI-SSL must exceed it using only 25\%
+  labels.
+
+  \item \textbf{SenseFi (CNN-5)}~\cite{ma2023sensefi}: A five-layer CNN
+  trained on random 80/20 subject-independent splits covering all 22
+  gesture classes.
+  Reported accuracy: \textbf{70.19\%}.
+  Note that this protocol does not enforce cross-environment evaluation;
+  the comparison is included for context only and does not constitute a
+  fair direct comparison.
+
+  \item \textbf{ARC-Fi}~\cite{yang2023arcfi}: A semi-supervised
+  cross-room method that reports 79--91\% accuracy across different
+  configurations on Widar3.0.
+  Direct comparison is approximate due to differences in gesture set
+  size and split strategy.
+
+\end{itemize}
+
+\subsection{Results}
+\label{sec:experiments:results}
+
+[To be completed after training runs.]
+
+\subsection{Ablation Study}
+\label{sec:experiments:ablation}
+
+[To be completed.]
+
+% =============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% =============================================================================
+
+[To be completed.]
+
+% =============================================================================
+% References
+% =============================================================================
+
+\begin{thebibliography}{9}
+
+\bibitem{zheng2019widar3}
+Y.~Zheng, Y.~Zhang, K.~Qian, G.~Zhang, Y.~Liu, C.~Wu, and Z.~Yang,
+``Zero-Effort Cross-Domain Gesture Recognition with Wi-Fi,''
+in \emph{Proc. 17th ACM Int. Conf. Mobile Systems, Applications, and
+Services (MobiSys)}, Seoul, South Korea, Jun.\ 2019, pp.~313--325.
+
+\bibitem{ma2023sensefi}
+Y.~Ma, G.~Zhou, and S.~Wang,
+``SenseFi: A Library and Benchmark on Deep-Learning-Empowered Wi-Fi
+Human Sensing,''
+\emph{Patterns}, vol.~4, no.~3, p.~100703, Mar.\ 2023.
+
+\bibitem{yang2023arcfi}
+H.~Yang \textit{et al.},
+``ARC-Fi: Adaptive and Robust Cross-Environment Wi-Fi Sensing via
+Semi-Supervised Contrastive Learning,''
+\emph{arXiv preprint arXiv:2310.06328}, Oct.\ 2023.
+
+\end{thebibliography}
+
+\end{document}
