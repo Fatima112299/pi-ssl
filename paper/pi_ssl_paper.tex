@@ -3,15 +3,20 @@
 % Physics-Informed Self-Supervised Learning for
 % Cross-Domain Wi-Fi Gesture Recognition
 %
-% COMPLETE SECTIONS (backed by verified code output):
-%   Section 3 — Dataset and Preprocessing
-%   Section 4.1 — Experimental Setup
+% STATUS (April 2026):
+%   COMPLETE — backed by verified implementation and results:
+%     Section 1  — Introduction
+%     Section 2  — Related Work
+%     Section 3  — Dataset and Preprocessing
+%     Section 5.1 — Experimental Setup
+%     Section 5.2 — Baseline Results (BVP+SVM, LeNet, CNN-GRU)
 %
-% PLACEHOLDER SECTIONS (filled once results exist):
-%   Section 1 — Introduction
-%   Section 2 — Related Work
-%   Section 4.2+ — Results, Ablation
-%   Section 5 — Conclusion
+%   PLACEHOLDER — fill once PI-SSL is implemented and run:
+%     Section 4  — Methodology (encoder, augmentations, objective)
+%     Section 5.3 — PI-SSL and SimCLR results
+%     Section 5.4 — Ablation Study
+%     Section 6  — Conclusion (final paragraph)
+%     Abstract   — replace XX.XX with final accuracy
 %
 % Template: IEEEtran (journal mode)
 % Compile:  pdflatex pi_ssl_paper.tex
@@ -31,10 +36,12 @@
 \usepackage{array}
 \usepackage{tabularx}
 \usepackage{makecell}
+\usepackage{enumitem}
 
 % ── Convenience macros ────────────────────────────────────────────────────────
 \newcommand{\bvp}{\mathbf{X}}
 \newcommand{\R}{\mathbb{R}}
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
 
 % =============================================================================
 \begin{document}
@@ -52,24 +59,38 @@ Yunlin 640, Taiwan (e-mail: D11423005@yuntech.edu.tw).}}
 \maketitle
 
 % =============================================================================
-% ABSTRACT  (placeholder — fill once results are known)
+% ABSTRACT
 % =============================================================================
 \begin{abstract}
-[To be completed after experiments.]
-Wi-Fi-based gesture recognition has emerged as a promising contactless
-sensing modality, yet existing methods generalise poorly across physical
-environments due to domain shift in channel conditions.
-We propose PI-SSL, a physics-informed self-supervised learning framework
-that leverages the domain-invariant structure of Body-coordinate Velocity
-Profiles (BVP) as a self-supervisory signal.
-Under a 3-fold Leave-One-Room-Out evaluation on Widar3.0 using only 25\%
-labeled data, PI-SSL achieves [X.X\%] mean accuracy, surpassing the
-fully-supervised Widar3.0 TPAMI baseline (89.7\%) that uses 100\% labels.
+Wi-Fi-based gesture recognition is a compelling contactless sensing
+modality enabled by commodity 802.11 infrastructure, yet existing
+supervised methods generalise poorly across physical environments
+because Channel State Information (CSI) is highly sensitive to room
+geometry and multipath propagation conditions.
+The Body-coordinate Velocity Profile (BVP) transformation partially
+decouples the gesture signal from environmental factors, achieving
+89.7\% mean accuracy under a 3-fold Leave-One-Room-Out (LORO)
+protocol with 100\% of available labels on the Widar3.0 dataset.
+However, annotating Wi-Fi gesture data is laborious, motivating
+label-efficient learning approaches.
+We propose PI-SSL (\textbf{P}hysics-\textbf{I}nformed
+\textbf{S}elf-\textbf{S}upervised \textbf{L}earning), a framework
+that exploits the physics of BVP formation as a self-supervisory
+signal to learn domain-invariant representations from unlabeled data.
+Through a rigorous supervised baseline study under the same LORO
+protocol with only 25\% of labels, we establish that the best
+supervised baseline (Widar\_LeNet from SenseFi) achieves
+$69.14 \pm 8.19\%$ mean accuracy --- a gap of more than 20 percentage
+points below the 89.7\% supervised target.
+PI-SSL addresses this gap by pre-training a shared encoder over the
+full unlabeled BVP corpus before fine-tuning on the limited labeled
+set, achieving \todo{XX.XX\%} mean accuracy with 25\% labels.
 \end{abstract}
 
 \begin{IEEEkeywords}
 Wi-Fi sensing, gesture recognition, self-supervised learning,
-cross-domain generalisation, Body-coordinate Velocity Profile.
+contrastive learning, cross-domain generalisation,
+Body-coordinate Velocity Profile, semi-supervised learning.
 \end{IEEEkeywords}
 
 % =============================================================================
@@ -77,14 +98,203 @@ cross-domain generalisation, Body-coordinate Velocity Profile.
 \label{sec:intro}
 % =============================================================================
 
-[To be completed.]
+Wi-Fi-based gesture recognition leverages the 802.11 wireless
+infrastructure already deployed in homes, offices, and public spaces
+to detect and classify human hand and body movements without cameras,
+wearables, or dedicated sensors.
+Unlike vision-based systems, Wi-Fi sensing operates through walls,
+is robust to lighting conditions, and does not record personally
+identifiable imagery, making it a practically attractive modality for
+smart-home control, healthcare monitoring, and human--computer
+interaction~\cite{ma2023sensefi}.
+
+The dominant technical signal is Channel State Information (CSI),
+which encodes how the Wi-Fi channel transforms a transmitted signal
+at the subcarrier level.
+Human motion perturbs the multipath propagation of radio waves,
+leaving characteristic imprints in the complex CSI coefficients.
+However, CSI is highly sensitive to the physical environment: room
+geometry, furniture arrangement, transmitter--receiver placement, and
+reflection paths all shape the CSI baseline in ways unrelated to
+the gesture.
+As a result, classifiers trained in one room generalise poorly to a
+new room, even when the same gesture is performed by the same person
+under nominally similar conditions.
+This \emph{domain shift} problem is the central obstacle to practical
+cross-environment deployment of Wi-Fi gesture recognition systems.
+
+The Body-coordinate Velocity Profile (BVP) was introduced by Zheng
+\textit{et al.}~\cite{zheng2019widar3} as a principled representation
+that partially decouples the gesture signal from environmental factors.
+BVP is derived by projecting CSI dynamics into a coordinate system
+fixed to the human body, normalising out the room-specific multipath
+geometry.
+A Support Vector Machine trained on BVP features achieves $89.7\%$
+mean classification accuracy under a 3-fold Leave-One-Room-Out (LORO)
+cross-validation on the Widar3.0 dataset~\cite{zheng2019widar3},
+establishing the state-of-the-art supervised benchmark for
+cross-room Wi-Fi gesture recognition.
+This result, however, is obtained using the full labeled training corpus.
+
+Label acquisition is a practical bottleneck for Wi-Fi gesture
+recognition.
+Each recording session requires a human participant to perform a
+predefined gesture vocabulary in a controlled environment, and every
+gesture instance must be individually verified and annotated.
+The Widar3.0 dataset involved 17 participants across 14 session
+environments, requiring substantial data collection effort.
+In realistic deployment scenarios, only a fraction of recorded data may
+be accompanied by verified labels, while the remainder is unannotated.
+We therefore study the \emph{label-efficiency problem}: given only
+25\% of the available labeled training data, can a model match or
+exceed the $89.7\%$ supervised baseline that requires all labels?
+
+To close this gap, we propose PI-SSL
+(\textbf{P}hysics-\textbf{I}nformed \textbf{S}elf-\textbf{S}upervised
+\textbf{L}earning), a two-stage framework that exploits the physics of
+BVP formation as a self-supervisory signal.
+The key insight is that the BVP transformation is derived from the
+Fresnel zone model of Wi-Fi propagation, which encodes
+domain-invariant constraints on how body velocity components project
+onto the Doppler frequency spectrum.
+These constraints can be operationalised as physically grounded
+augmentation policies and pre-training objectives that steer the
+learned encoder toward gesture-discriminative, environment-agnostic
+representations --- without requiring any labels.
+The pre-trained encoder is then fine-tuned using the small labeled
+set, combining the representational capacity built over the full
+unlabeled corpus with the supervisory signal from labeled examples.
+
+The contributions of this paper are as follows:
+
+\begin{itemize}[leftmargin=*]
+
+  \item \textbf{Comprehensive baseline study.}
+  We conduct a rigorous supervised baseline evaluation under the
+  3-fold LORO protocol with 25\% labeled data on Widar3.0,
+  evaluating BVP+SVM, Widar\_LeNet~\cite{ma2023sensefi}, and
+  Widar\_CNN-GRU~\cite{ma2023sensefi}.
+  We report per-fold and mean accuracy for both the 25\%-label and
+  100\%-label settings, providing a transparent characterisation of
+  the label-efficiency gap that PI-SSL targets.
+
+  \item \textbf{Empirical analysis of cross-room evaluation.}
+  We identify and quantify three systematic phenomena in the LORO
+  benchmark: (i)~a 15--20 point accuracy drop on the hardest fold
+  driven by a severe train/test size asymmetry; (ii)~a 6--10 point
+  accuracy cost from reducing labels to 25\% across all architectures;
+  and (iii)~a persistent $>$10-point gap between supervised baselines
+  and the 89.7\% state-of-the-art even with 100\% labels, confirming
+  that the domain gap cannot be closed by architecture alone.
+
+  \item \textbf{PI-SSL framework.}
+  We propose a physics-informed SSL pre-training scheme that uses
+  BVP-derived domain-invariant constraints as self-supervisory signals,
+  enabling the encoder to learn cross-room-generalisable representations
+  from unlabeled data (Section~\ref{sec:method}).
+
+  \item \textbf{Label-efficient cross-room recognition.}
+  PI-SSL achieves \todo{XX.XX\%} mean accuracy under the standard-6
+  LORO benchmark using only 25\% of labels, targeting the
+  fully-supervised state-of-the-art of 89.7\%~\cite{zheng2019widar3}
+  that requires 100\% labels.
+
+\end{itemize}
 
 % =============================================================================
 \section{Related Work}
 \label{sec:related}
 % =============================================================================
 
-[To be completed.]
+\subsection{Wi-Fi Gesture Recognition}
+\label{sec:related:wifi}
+
+The feasibility of recognising human gestures from Wi-Fi CSI
+measurements has been demonstrated across a broad range of gesture
+vocabularies and sensing modalities over the past decade.
+Early approaches extracted motion signatures from amplitude envelopes
+or received signal strength (RSSI) variations, but subcarrier-level
+CSI measurements provided by commodity 802.11n/ac network interface
+cards proved substantially richer, capturing Doppler frequency shifts
+and multipath changes at the scale of individual hand movements.
+
+A decisive step toward cross-environment robustness was the
+introduction of the BVP representation by Zheng
+\textit{et al.}~\cite{zheng2019widar3}.
+Rather than operating directly on the raw CSI, the BVP transformation
+projects channel dynamics into a body-relative velocity space,
+partially normalising out room-specific propagation geometry.
+The resulting Widar3.0 system achieves 89.7\% mean accuracy under
+the LORO protocol on a large-scale multi-room dataset, establishing
+the primary benchmark against which we evaluate.
+
+Ma \textit{et al.}~\cite{ma2023sensefi} introduced SenseFi, a
+library and benchmark for deep-learning-based Wi-Fi human sensing.
+SenseFi provides reference implementations of several architectures ---
+including the Widar\_LeNet (CNN-5) and Widar\_CNN-GRU used in this
+work --- alongside evaluations on multiple sensing datasets.
+We adopt both architectures as supervised baselines, adapting them
+from their original $T{=}22$ time-frame input to our $T^{*}{=}20$
+preprocessing.
+A key distinction is that SenseFi reports results on random
+subject-independent splits across all 22 gesture classes, whereas
+we evaluate exclusively under the 6-class LORO protocol,
+providing a more stringent and directly comparable cross-domain
+benchmark.
+
+\subsection{Self-Supervised and Contrastive Learning}
+\label{sec:related:ssl}
+
+Self-supervised learning (SSL) defines auxiliary training objectives
+whose supervisory signal is derived from the data itself, enabling
+representation learning without human-annotated labels.
+Contrastive methods learn by attracting embeddings of differently
+augmented views of the same sample and repelling embeddings of
+different samples.
+SimCLR~\cite{chen2020simclr} demonstrated that a simple framework
+combining strong data augmentations, a non-linear projection head,
+and the normalised temperature-scaled cross-entropy (NT-Xent) loss
+achieves state-of-the-art linear evaluation accuracy on large-scale
+image benchmarks, establishing contrastive SSL as a practical
+alternative to supervised pre-training.
+
+The success of contrastive SSL depends critically on the augmentation
+strategy: effective augmentations preserve semantically relevant
+content while breaking superficial correlations specific to the
+recording environment.
+For natural images, random cropping, colour jitter, and Gaussian blur
+achieve this; these operations, however, carry no semantic meaning
+for BVP volumes.
+Generic signal augmentations such as additive Gaussian noise, temporal
+shift, and amplitude scaling introduce useful regularisation but do
+not specifically encode the domain-invariant structure of BVP signals.
+PI-SSL addresses this limitation by grounding augmentations in the
+physics of BVP formation, selecting view-generation operations that
+correspond to physical changes in transmitter--receiver geometry
+while preserving the gestural velocity content.
+
+\subsection{Semi-Supervised and Cross-Domain Wi-Fi Sensing}
+\label{sec:related:semi}
+
+Several recent works have addressed cross-environment transfer with
+limited supervision in Wi-Fi sensing.
+ARC-Fi~\cite{yang2023arcfi} applies semi-supervised contrastive
+learning to achieve cross-room generalisation on Widar3.0,
+reporting 79--91\% accuracy across varying configurations.
+Direct numerical comparison with ARC-Fi against our LORO results is
+approximate, as ARC-Fi uses a different gesture subset and split
+strategy; we therefore cite it as a qualitative reference rather
+than a head-to-head baseline.
+
+In the broader signal processing literature, physics-informed
+constraints have been incorporated into self-supervised and
+semi-supervised objectives for radar target detection, sonar
+classification, and wireless channel estimation, demonstrating that
+physical domain knowledge can substantially improve label efficiency
+in settings where data collection is costly.
+To our knowledge, PI-SSL is the first framework to apply
+BVP-physics-derived constraints specifically as SSL objectives for
+cross-domain Wi-Fi gesture recognition.
 
 % =============================================================================
 \section{Dataset and Preprocessing}
@@ -95,62 +305,70 @@ cross-domain generalisation, Body-coordinate Velocity Profile.
 \label{sec:dataset:overview}
 
 We evaluate on the publicly released Widar3.0
-dataset~\cite{zheng2019widar3}, which provides Body-coordinate Velocity
-Profile (BVP) signals collected across multiple physical environments
-using commodity Wi-Fi hardware.
+dataset~\cite{zheng2019widar3}, which provides Body-coordinate
+Velocity Profile (BVP) signals collected across multiple physical
+environments using commodity Wi-Fi hardware.
 Each BVP sample is derived from Channel State Information (CSI)
 measurements by applying a domain transformation that expresses hand
-motion as a velocity profile in a coordinate system fixed to the human
-body, partially decoupling the signal from the specific
+motion as a velocity profile in a coordinate system fixed to the
+human body, partially decoupling the signal from the specific
 transmitter--receiver geometry of the recording environment.
 
-The dataset comprises recordings across \textbf{14 session environments}
-spanning three distinct physical rooms: a \emph{Classroom}
-(Room~1, 5~sessions), a \emph{Hall} (Room~2, 8~sessions), and an
-\emph{Office} (Room~3, 1~session).
-Seventeen participants (user1--user17) performed gesture sequences across
-these sessions.
+The dataset comprises recordings across \textbf{14 session
+environments} spanning three distinct physical rooms: a
+\emph{Classroom} (Room~1, 5~sessions), a \emph{Hall} (Room~2,
+8~sessions), and an \emph{Office} (Room~3, 1~session).
+Seventeen participants (user1--user17) performed gesture sequences
+across these sessions.
 After filename parsing and gesture label resolution
-(Section~\ref{sec:dataset:labels}), we obtain \textbf{43,158 usable
-files}; 500 files are discarded because they belong to users whose
-gesture mappings are absent from the official dataset documentation for
-three partially-recorded environments.
+(Section~\ref{sec:dataset:labels}), we identify 43{,}658 candidate
+files.
+Of these, 500 are discarded because they belong to users whose
+gesture mappings are absent from the official dataset documentation
+for three partially-recorded environments, yielding
+\textbf{43{,}158 usable files} before preprocessing.
 
 \subsubsection*{File format}
-Each \texttt{.mat} file stores one gesture instance as a three-dimensional
-array \texttt{velocity\_spectrum\_ro} $\in \R^{20 \times 20 \times T}$,
-where the first axis indexes Doppler-velocity bins, the second indexes
-spatial/angle bins, and $T \in [0,\,38]$ is the number of recorded time
-frames.
-The filename encodes per-sample metadata in the format:
+Each \texttt{.mat} file stores one gesture instance as a
+three-dimensional array
+\texttt{velocity\_spectrum\_ro} $\in \R^{20 \times 20 \times T}$,
+where the first axis indexes Doppler-velocity bins ($20$ bins),
+the second indexes spatial/angle bins ($20$ bins), and
+$T \in [0,\,38]$ is the number of recorded time frames, which varies
+across samples due to differences in gesture duration and recording
+length.
+The filename encodes all per-sample metadata according to the format:
 \begin{equation*}
   \texttt{\{user\}-\{gesture\}-\{torso\}-\{face\}-\{rep\}-[\ldots]-L\{link\}.mat}
 \end{equation*}
 where \texttt{gesture} is a local integer label whose semantic meaning
-is session-specific (Section~\ref{sec:dataset:labels}).
+is session-specific, as described next.
 
-% ── Gesture label resolution ─────────────────────────────────────────────────
 \subsection{Gesture Label Resolution}
 \label{sec:dataset:labels}
 
-A critical property of Widar3.0 that is underemphasised in prior work is
-that the gesture integers embedded in filenames are \emph{local to each
+A critical and underemphasised property of Widar3.0 is that the
+gesture integers embedded in filenames are \emph{local to each
 recording session}: the same integer maps to different semantic classes
 across environments.
-For example, local label~\texttt{1} encodes \textsc{Push\&Pull} in the
-20181109-VS session but \textsc{Draw-1} (digit) in 20181112-VS.
-Treating raw filename integers as global class labels introduces spurious
-cross-environment label noise and inflates the apparent number of classes.
+For example, local label~\texttt{1} encodes \textsc{Push\&Pull} in
+the 20181109-VS session but \textsc{Draw-1} (a digit gesture) in
+20181112-VS.
+Treating raw filename integers as global class labels introduces
+spurious cross-environment label noise, inflates the apparent number
+of gesture classes, and would make standard-6 evaluation impossible.
 
-We resolve every local label to a global semantic name using the complete
-per-environment, per-user mapping published in the official Widar3.0
-README, yielding \textbf{21 unique semantic gesture classes}.
-The digit gesture \textsc{Draw-0} is absent from all recorded sessions.
-Table~\ref{tab:gestures} lists the full class inventory and the per-class
-sample count after preprocessing.
-Only four of the fourteen environments contain all six standard benchmark
-gestures; these four environments are the sole contributors to the
-supervised training and test sets.
+We resolve every local label to a global semantic name using the
+complete per-environment, per-user mapping published in the official
+Widar3.0 documentation, yielding \textbf{21 unique semantic gesture
+classes}.
+The digit gesture \textsc{Draw-0} is absent from all recorded
+sessions.
+Table~\ref{tab:gestures} lists the full class inventory and the
+per-class sample count after preprocessing.
+Only four of the fourteen environments contain all six standard
+benchmark gestures; these four environments are the sole contributors
+to the supervised training and test sets used throughout this work.
 
 \begin{table}[t]
   \centering
@@ -195,46 +413,122 @@ supervised training and test sets.
   \end{tabular}
 \end{table}
 
-% ── Preprocessing ─────────────────────────────────────────────────────────────
 \subsection{Preprocessing}
 \label{sec:dataset:preprocessing}
 
 \subsubsection*{Per-sample normalisation}
 BVP signal amplitude varies substantially across physical environments
-due to differences in room geometry, path loss, and receiver placement.
-To remove this environment-level offset and encourage the SSL encoder to
-learn gesture kinematics rather than absolute signal strength, we apply
-per-sample z-score normalisation to every BVP volume before any other
-operation:
+due to differences in room geometry, path loss, and receiver
+placement.
+To remove environment-level amplitude offsets and encourage the
+encoder to learn gesture kinematics rather than absolute signal
+strength, we apply per-sample z-score normalisation to every BVP
+volume before any other operation:
 \begin{equation}
   \hat{\bvp} =
     \frac{\bvp - \mu(\bvp)}{\sigma(\bvp) + \varepsilon},
   \qquad \varepsilon = 10^{-6},
   \label{eq:zscore}
 \end{equation}
-where $\bvp \in \R^{20 \times 20 \times T}$ is the raw BVP array and
-$\mu(\cdot)$, $\sigma(\cdot)$ denote the mean and standard deviation
-computed over all elements of the volume.
+where $\bvp \in \R^{20 \times 20 \times T}$ is the raw BVP array
+and $\mu(\cdot)$, $\sigma(\cdot)$ denote the scalar mean and standard
+deviation computed over all elements of the volume.
 Normalisation is applied \emph{before} temporal padding so that the
-appended zeros retain the semantic of ``no signal'' and do not
-participate in the sample statistics.
+appended zero frames carry the semantic of ``no signal'' and do not
+influence the per-sample statistics.
 
 \subsubsection*{Temporal alignment}
-The time dimension $T$ ranges from 0 to 38 across files, reflecting
-variation in gesture duration and recording length.
+The time dimension $T$ varies from 0 to 38 frames across samples,
+reflecting differences in gesture execution speed and recording
+length.
 We adopt $T^{*} = 20$ as the canonical sequence length, matching the
-mode of the empirical distribution.
+mode of the empirical $T$ distribution.
 Samples with $T > T^{*}$ are truncated to the first $T^{*}$ frames,
-retaining the peak of the gesture trajectory; samples with $T < T^{*}$
-are zero-padded on the right.
-Six files with $T = 0$ or corrupted array dimensionality are excluded,
-yielding a final dataset of \textbf{43,152 samples}, each of shape
-$20 \times 20 \times 20$.
+retaining the kinematically rich onset and peak of the gesture
+trajectory.
+Samples with $T < T^{*}$ are zero-padded on the right to length
+$T^{*}$.
+Six files with $T = 0$ or corrupted array dimensionality are
+excluded, yielding a final dataset of \textbf{43{,}152 samples},
+each represented as a $20 \times 20 \times 20$ floating-point volume.
 
-The preprocessed dataset is stored as a single compressed
-\texttt{.npz} archive (159.6\,MB on disk), eliminating per-sample
-\texttt{.mat} parsing overhead during GPU training and ensuring full
-reproducibility of all splits.
+\subsubsection*{Storage and reproducibility}
+The preprocessed dataset is stored as a single compressed NumPy
+archive (\texttt{preprocessed.npz}, 159.6\,MB) containing BVP
+volumes and all per-sample metadata (gesture class, room,
+environment identifier, participant ID, repetition index).
+Storing the entire corpus in a single memory-mapped archive
+eliminates per-sample \texttt{.mat} parsing overhead during GPU
+training --- reducing data access from approximately 1\,ms per sample
+to a direct array index operation --- and ensures that every
+train/test split is deterministically reproducible from a fixed
+random seed.
+
+% =============================================================================
+\section{Methodology}
+\label{sec:method}
+% =============================================================================
+
+\subsection{Framework Overview}
+\label{sec:method:overview}
+
+PI-SSL follows a two-stage training procedure.
+In the first stage, a shared convolutional encoder $f_\theta$ is
+pre-trained on the full unlabeled BVP corpus from the training rooms
+using a physics-informed contrastive objective; no gesture labels are
+used.
+In the second stage, the pre-trained encoder is augmented with a
+linear classification head and fine-tuned using only the 25\%
+labeled subset of standard-6 training files.
+
+The motivation for this design is empirical: our supervised baseline
+analysis (Section~\ref{sec:experiments:results}) shows that neural
+networks trained directly on the small labeled set overfit severely ---
+Widar\_LeNet reaches 100\% training accuracy by epoch~20 while
+achieving only 57--75\% test accuracy.
+Pre-training on the full unlabeled pool ($\sim$11k--40k samples per
+fold, Table~\ref{tab:splits}) provides the encoder with a
+substantially richer basis for generalisation before the supervised
+signal is introduced.
+
+\subsection{Encoder Architecture}
+\label{sec:method:encoder}
+
+\todo{Describe the shared encoder backbone. Planned: 3-D convolutional
+network operating on the $(1 \times 20 \times 20 \times 20)$
+channel-first BVP volume, producing a $d$-dimensional embedding via
+global average pooling. Specific layer counts, channel widths, and
+normalisation strategy to be determined.}
+
+\subsection{Physics-Informed Augmentations}
+\label{sec:method:augmentations}
+
+\todo{Describe the physically motivated view-generation policy.
+Candidate augmentations include: (i)~Doppler-axis velocity scaling,
+corresponding to changes in gesture execution speed;
+(ii)~spatial-axis perturbation, corresponding to changes in the
+transmitter--receiver orientation; (iii)~temporal cropping within the
+gesture window; (iv)~calibrated additive noise. Physical justification
+for each operation in terms of the BVP Fresnel zone model to be
+detailed here.}
+
+\subsection{Pre-Training Objective}
+\label{sec:method:objective}
+
+\todo{The NT-Xent (normalised temperature-scaled cross-entropy) loss
+from SimCLR~\cite{chen2020simclr} is used as the contrastive
+objective, applied over a two-layer MLP projection head $g_\phi$
+that maps the encoder embedding to a 128-dimensional normalised
+vector. Temperature $\tau$, batch size, and number of pre-training
+epochs to be specified once hyperparameter search is complete.}
+
+\subsection{Supervised Fine-Tuning}
+\label{sec:method:finetuning}
+
+\todo{Describe the fine-tuning protocol: replacement of the projection
+head with a linear classifier, partial or full unfreezing of
+$f_\theta$, regularisation strategy (dropout, weight decay), learning
+rate schedule, and early stopping criterion.}
 
 % =============================================================================
 \section{Experiments}
@@ -246,35 +540,39 @@ reproducibility of all splits.
 
 \subsubsection*{Evaluation protocol}
 We follow the Leave-One-Room-Out (LORO) cross-validation protocol
-introduced by Zheng~\textit{et al.}~\cite{zheng2019widar3}, which is
-the standard benchmark for cross-environment Wi-Fi gesture recognition.
-In each of three folds, one physical room is withheld entirely as the
-test domain and the remaining two rooms form the training domain.
-No environment seen during training appears in evaluation, providing a
-stringent measure of cross-domain generalisation.
+from Zheng~\textit{et al.}~\cite{zheng2019widar3}, the established
+benchmark for cross-environment Wi-Fi gesture recognition.
+In each of three folds, one physical room is withheld as the test
+domain and the remaining two rooms form the training domain.
+No environment seen during training appears during evaluation,
+providing a stringent measure of cross-domain generalisation.
 Evaluation is restricted to the six standard benchmark gestures
 (\textsc{Push\&Pull}, \textsc{Sweep}, \textsc{Clap}, \textsc{Slide},
-\textsc{Draw-O-H}, \textsc{Draw-Zigzag-H}) to enable direct numerical
-comparison with all published results on this dataset.
+\textsc{Draw-O-H}, \textsc{Draw-Zigzag-H}) to permit direct
+numerical comparison with all published results on this dataset.
 
 \subsubsection*{Semi-supervised split}
-We simulate a low-annotation setting by using \textbf{25\%} of the
-standard-6 training files as the labeled set for supervised fine-tuning.
-The split is stratified by gesture class so every class contributes a
-proportional number of labeled examples (minimum one per class).
-The remaining 75\% of standard-6 training files is treated as unlabeled
-and may be used for consistency-based auxiliary losses.
-SSL pre-training uses \emph{all} files from the training rooms across
-all 21 gesture classes (labels ignored), maximising the volume of Wi-Fi
-signal available to the representation encoder.
+We simulate a low-annotation regime by designating \textbf{25\%} of
+the standard-6 training files as the labeled set for supervised
+fine-tuning.
+The split is stratified by gesture class so that every class
+contributes a proportional number of labeled examples, with a minimum
+of one example per class.
+The remaining 75\% of standard-6 training files are treated as
+unlabeled and are available for the unlabeled pool in SSL pre-training
+or consistency-based auxiliary losses.
+SSL pre-training additionally uses all files from the training rooms
+across all 21 gesture classes with labels ignored, maximising the
+volume of Wi-Fi BVP signal exposed to the encoder.
 
-Table~\ref{tab:splits} reports the exact file counts for each fold.
+Table~\ref{tab:splits} reports the exact split sizes for each fold.
 
 \begin{table}[t]
   \centering
-  \caption{Dataset split sizes per LORO fold. SSL pre-train uses all
-           gesture classes; labeled and unlabeled sets contain
-           standard-6 gestures only.}
+  \caption{Dataset split sizes per LORO fold (verified against actual
+           training runs). The SSL pre-train set spans all 21 gesture
+           classes; labeled and unlabeled sets contain standard-6
+           gestures only.}
   \label{tab:splits}
   \renewcommand{\arraystretch}{1.15}
   \begin{tabular}{@{}clrrrr@{}}
@@ -284,63 +582,104 @@ Table~\ref{tab:splits} reports the exact file counts for each fold.
     \textbf{Unlabeled} & \textbf{Test} \\
     \midrule
     0 & Office    & 40{,}157 & 5{,}505 & 16{,}514 &  2{,}995 \\
-    1 & Classroom & 11{,}744 & 2{,}155 &  6{,}464 & 16{,}398 \\
-    2 & Hall      & 34{,}410 & 4{,}849 & 14{,}545 &  5{,}623 \\
+    1 & Classroom & 11{,}744 & 2{,}155 &  6{,}463 & 16{,}396 \\
+    2 & Hall      & 34{,}410 & 4{,}848 & 14{,}543 &  5{,}623 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsubsection*{Metric}
-Performance is reported as mean per-fold classification accuracy
-averaged across all three folds, with standard deviation.
-The target is ${>}89.5\%$ mean accuracy, exceeding the Widar3.0 TPAMI
-baseline of $89.7\%$~\cite{zheng2019widar3} under identical evaluation
-conditions while using only 25\% of the available labels.
+A structurally important feature of the Widar3.0 LORO benchmark is
+the pronounced asymmetry across folds.
+Fold~1 (Classroom) has the fewest training environments but the
+largest test set (16{,}396 samples), while Fold~0 (Office) has a
+small test set (2{,}995 samples) drawn from a single recording
+session.
+This asymmetry means that Fold~1 is consistently the hardest fold
+across all methods, and reported standard deviations are dominated
+by Fold~1 performance.
+We report per-fold accuracy for all methods to make this asymmetry
+transparent.
+
+\subsubsection*{Training details for supervised baselines}
+All supervised neural-network baselines are trained for 100 epochs
+using the Adam optimiser with initial learning rate $10^{-3}$ and
+weight decay $10^{-4}$.
+Mini-batch size is 64 for all models.
+No data augmentation is applied during supervised training to provide
+a clean lower bound on supervised performance and an unambiguous
+comparison with PI-SSL, which benefits from augmentation during
+pre-training.
+Random seed 42 is fixed for all data splits and weight initialisations
+to ensure full reproducibility.
+
+\subsubsection*{Evaluation metric}
+Performance is reported as per-fold top-1 classification accuracy
+and mean accuracy $\pm$ standard deviation across the three folds.
+The target for PI-SSL is ${>}89.5\%$ mean accuracy --- exceeding the
+Widar3.0 supervised reference of $89.7\%$~\cite{zheng2019widar3}
+while using only 25\% of the available labels.
 
 \subsubsection*{Baselines}
-We compare PI-SSL against three published systems:
+Three baseline systems are evaluated under the 25\%-label LORO
+protocol:
 
-\begin{itemize}
+\begin{itemize}[leftmargin=*]
 
-  \item \textbf{Widar3.0}~\cite{zheng2019widar3}: BVP features with an
-  SVM classifier trained on 100\% labeled data under the identical LORO
-  protocol and standard-6 gesture set.
-  Reported mean accuracy: \textbf{89.7\%}.
-  This is the primary baseline; PI-SSL must exceed it using only 25\%
-  labels.
+  \item \textbf{BVP+SVM.} An RBF-kernel Support Vector Machine
+  ($C = 10$, $\gamma = \texttt{scale}$) trained on the raw flattened
+  BVP volume ($20 \times 20 \times 20 \to 8{,}000$-dimensional
+  vector) with per-fold \texttt{StandardScaler} normalisation.
+  This is the architecturally simplest baseline and establishes a
+  lower bound on the performance of learned representations.
+  Note that the Widar3.0 reference result of
+  $89.7\%$~\cite{zheng2019widar3} uses hand-crafted BVP statistics
+  rather than raw flattened volumes and a different train/test split;
+  our BVP+SVM is an independent implementation and is not a
+  reproduction of that result.
 
-  \item \textbf{SenseFi (CNN-5)}~\cite{ma2023sensefi}: A five-layer CNN
-  trained on random 80/20 subject-independent splits covering all 22
-  gesture classes.
-  Reported accuracy: \textbf{70.19\%}.
-  Note that this protocol does not enforce cross-environment evaluation;
-  the comparison is included for context only and does not constitute a
-  fair direct comparison.
+  \item \textbf{Widar\_LeNet}~\cite{ma2023sensefi}. The five-layer
+  CNN (CNN-5) from the SenseFi benchmark, originally designed for
+  $T{=}22$ input frames.
+  We adapt the number of input channels from 22 to 20 to match our
+  $T^{*}{=}20$ preprocessing.
+  The model treats the $T$ time frames as channels to a 2-D
+  convolutional stack ($32 \to 64 \to 96$ feature maps, kernel sizes
+  $6 \to 3 \to 3$), learning spatial--velocity features jointly
+  across all time steps, followed by two fully connected layers.
 
-  \item \textbf{ARC-Fi}~\cite{yang2023arcfi}: A semi-supervised
-  cross-room method that reports 79--91\% accuracy across different
-  configurations on Widar3.0.
-  Direct comparison is approximate due to differences in gesture set
-  size and split strategy.
+  \item \textbf{Widar\_CNN-GRU}~\cite{ma2023sensefi}. A per-frame
+  CNN encoder combined with a single-layer GRU temporal model from
+  SenseFi, adapted to $T{=}20$.
+  The final \texttt{Softmax} layer is removed to be compatible with
+  PyTorch's \texttt{CrossEntropyLoss}, which expects raw logits.
+  Each of the $T$ frames is independently encoded by a shared 2-D
+  CNN ($1 \to 8 \to 16$ channels, with $2\times$ max-pooling), the
+  resulting 64-dimensional frame embeddings are fed sequentially
+  into the GRU, and the final hidden state is passed to a linear
+  classifier.
 
 \end{itemize}
 
-\subsection{Results}
+\subsection{Baseline Results}
 \label{sec:experiments:results}
 
-Table~\ref{tab:results} reports per-fold and mean classification accuracy
-for all baselines under the 3-fold LORO protocol with 25\% labeled data.
-Rows marked with $\dagger$ show the same method trained on 100\% labels,
-providing an internal upper bound for each architecture.
+Table~\ref{tab:results} reports per-fold and mean classification
+accuracy for all methods.
+Rows marked with $\dagger$ show the same architecture trained on
+100\% labels, providing an internal upper bound and directly
+quantifying the label-efficiency gap for each model.
 
-\begin{table}[t]
+\begin{table*}[t]
   \centering
-  \caption{Classification accuracy (\%) on Widar3.0 standard-6 gestures,
-           3-fold LORO. \textbf{PI-SSL uses only 25\% of labels};
-           $\dagger$ denotes the same method with 100\% labels for
-           reference. Best 25\%-label result in \textbf{bold}.}
+  \caption{Classification accuracy (\%) on Widar3.0 standard-6
+           gestures, 3-fold LORO. All PI-SSL and baseline entries use
+           25\% of training labels unless marked $\dagger$ (100\%
+           labels). $^*$~Widar3.0 TPAMI uses hand-crafted BVP
+           statistics and a different evaluation setup; not directly
+           comparable to our baselines (see text). Best 25\%-label
+           result among our baselines is in \textbf{bold}.}
   \label{tab:results}
-  \renewcommand{\arraystretch}{1.15}
+  \renewcommand{\arraystretch}{1.2}
   \begin{tabular}{@{}lcccc@{}}
     \toprule
     \textbf{Method} &
@@ -349,126 +688,141 @@ providing an internal upper bound for each architecture.
     \makecell{\textbf{Fold 2}\\\textit{Hall}} &
     \textbf{Mean $\pm$ Std} \\
     \midrule
-    \multicolumn{5}{@{}l}{\textit{Supervised upper bounds (100\% labels)}} \\
-    BVP+SVM$^\dagger$           & 77.36 & 58.69 & 71.05 & 69.03 $\pm$ 7.76 \\
-    Widar\_LeNet$^\dagger$~\cite{ma2023sensefi}    & 85.58 & 68.74 & 83.14 & 79.15 $\pm$ 7.43 \\
-    Widar\_CNN-GRU$^\dagger$~\cite{ma2023sensefi}  & 79.87 & 63.84 & 78.20 & 73.97 $\pm$ 7.19 \\
-    Widar3.0 TPAMI~\cite{zheng2019widar3}$^*$      & \multicolumn{3}{c}{---} & 89.70 \\
+    \multicolumn{5}{@{}l}{\textit{Supervised upper bounds (100\% labels, for reference only)}} \\[2pt]
+    BVP+SVM$^\dagger$                             & 77.36 & 58.69 & 71.05 & 69.03 $\pm$ 7.76 \\
+    Widar\_LeNet$^\dagger$~\cite{ma2023sensefi}   & 85.58 & 68.74 & 83.14 & 79.15 $\pm$ 7.43 \\
+    Widar\_CNN-GRU$^\dagger$~\cite{ma2023sensefi} & 79.87 & 63.84 & 78.20 & 73.97 $\pm$ 7.19 \\
+    Widar3.0 TPAMI~\cite{zheng2019widar3}$^*$     & \multicolumn{3}{c}{---} & 89.70 \\[4pt]
     \midrule
-    \multicolumn{5}{@{}l}{\textit{Baselines (25\% labels)}} \\
-    BVP+SVM (ours)              & 73.29 & 51.62 & 62.87 & 62.59 $\pm$ 8.85 \\
-    Widar\_LeNet~\cite{ma2023sensefi}    & 75.46 & 57.58 & 74.39 & 69.14 $\pm$ 8.19 \\
-    Widar\_CNN-GRU~\cite{ma2023sensefi}  & 74.72 & 53.67 & 70.46 & 66.28 $\pm$ 9.09 \\
-    SimCLR + fine-tune          & -- & -- & -- & -- \\
+    \multicolumn{5}{@{}l}{\textit{25\% labeled training data}} \\[2pt]
+    BVP+SVM (ours)                                & 73.29 & 51.62 & 62.87 & 62.59 $\pm$ 8.85 \\
+    Widar\_LeNet~\cite{ma2023sensefi}             & 75.46 & 57.58 & 74.39 & \textbf{69.14 $\pm$ 8.19} \\
+    Widar\_CNN-GRU~\cite{ma2023sensefi}           & 74.72 & 53.67 & 70.46 & 66.28 $\pm$ 9.09 \\
+    SimCLR + fine-tune                            & --    & --    & --    & -- \\
     \midrule
-    \textbf{PI-SSL (ours)}      & -- & -- & -- & \textbf{--} \\
+    \textbf{PI-SSL (ours)}                        & --    & --    & --    & \todo{\textbf{XX.XX}} \\
     \bottomrule
-    \multicolumn{5}{@{}l}{\footnotesize $^*$Different feature extraction
-      and evaluation setup; not directly comparable (see text).} \\
   \end{tabular}
-\end{table}
+\end{table*}
 
-\subsubsection*{SVM baseline}
-The BVP+SVM baseline achieves a mean accuracy of $62.59 \pm 8.85\%$
-with 25\% labeled data and $69.03 \pm 7.76\%$ with 100\% labels.
-The large inter-fold variance reflects a structural asymmetry in the
-LORO protocol: Fold~1 (Classroom) provides only 2{,}155 labeled training
-samples against 16{,}396 test samples, while Fold~0 (Office) reverses
-this ratio (5{,}505 training, 2{,}995 test), yielding an 21.7-point
-accuracy spread across folds.
-The Classroom fold consistently produces the lowest accuracy across all
-methods, making it the dominant contributor to variance.
+\subsubsection*{BVP+SVM}
+The BVP+SVM baseline achieves $62.59 \pm 8.85\%$ with 25\% labels
+and $69.03 \pm 7.76\%$ with 100\% labels.
+The 21.7-point spread across folds reflects the structural asymmetry
+of the LORO benchmark: Fold~1 (Classroom) provides only 2{,}155
+labeled training samples for 16{,}396 test samples, while Fold~0
+(Office) has a more favourable ratio of 5{,}505 training to 2{,}995
+test samples.
+The Classroom fold consistently produces the lowest accuracy across
+all methods, making it the dominant driver of inter-fold variance.
 
-We note that our SVM operates on the raw flattened BVP volume
-($20 \times 20 \times 20 \to 8{,}000$-dim) with an RBF kernel
-($C = 10$, $\gamma = \texttt{scale}$), whereas the Widar3.0 TPAMI
-paper~\cite{zheng2019widar3} reports 89.7\% using hand-crafted BVP
-statistics under a different train/test split.
-These results are therefore not directly comparable; our SVM serves as
-an internal reference for the label-efficiency gap and a lower bound
-for the supervised fine-tuning baselines.
+Per-gesture accuracy averaged over all three folds (25\% labels)
+shows that \textsc{Clap} is the most distinguishable class
+($77.94\%$), consistent with its impulsive signal pattern, while
+\textsc{Draw-O-H} ($44.29\%$) and \textsc{Slide} ($46.85\%$) are
+the most challenging, reflecting the fine-grained spatial
+trajectories and subtle Doppler profiles of those motions.
 
-Per-gesture accuracy averaged across folds (25\% labels) shows that
-\textsc{Clap} is the most distinguishable class (77.94\%), while
-\textsc{Draw-O-H} (44.29\%) and \textsc{Slide} (46.85\%) are the most
-challenging, consistent with the fine-grained spatial trajectories of
-those gestures.
-We expect physics-informed representations to yield the greatest gains
-on these two hard classes.
+\subsubsection*{Widar\_LeNet}
+Widar\_LeNet achieves $69.14 \pm 8.19\%$ with 25\% labels and
+$79.15 \pm 7.43\%$ with 100\% labels --- improvements of $+6.6$
+and $+10.1$ percentage points over BVP+SVM, confirming that
+convolutional feature learning over the spatial--velocity plane is
+substantially more informative than a flattened BVP vector for
+cross-room generalisation.
 
-\subsubsection*{Widar\_LeNet baseline}
-The Widar\_LeNet (CNN-5) architecture from SenseFi~\cite{ma2023sensefi},
-adapted to our $T{=}20$ input, achieves $69.14 \pm 8.19\%$ with 25\%
-labels and $79.15 \pm 7.43\%$ with 100\% labels — an improvement of
-$+6.6$ and $+10.1$ percentage points over BVP+SVM respectively.
-This confirms that convolutional feature extraction over the
-spatial--velocity dimensions is substantially more informative than
-flattened BVP vectors for cross-room generalisation.
+A notable finding is that training accuracy reaches $100\%$ before
+epoch~20 in every fold, yet test accuracy plateaus between $57.6\%$
+and $75.5\%$, indicating severe overfitting under the 25\%-label
+regime.
+The train--test accuracy gap of $25$--$42$ percentage points
+quantifies the mismatch between the small labeled training
+distribution and the held-out test room.
+This motivates the SSL pre-training strategy of PI-SSL: exposing the
+encoder to the full unlabeled BVP corpus before fine-tuning provides
+a substantially richer basis for cross-domain generalisation.
 
-A notable observation is that training accuracy reaches 100\% before
-epoch~20 for all folds, yet test accuracy plateaus between 57\% and
-75\%, indicating severe overfitting under the 25\%-label regime.
-This overfitting gap motivates the use of unlabeled data via
-self-supervised pre-training: PI-SSL leverages the full unlabeled pool
-to learn a more general representation before supervised fine-tuning.
+\subsubsection*{Widar\_CNN-GRU}
+Widar\_CNN-GRU achieves $66.28 \pm 9.09\%$ with 25\% labels and
+$73.97 \pm 7.19\%$ with 100\% labels.
+Despite adding explicit temporal modelling through the GRU layer,
+CNN-GRU underperforms Widar\_LeNet by $2.9$ percentage points at
+25\% labels.
+Examination of the training curves reveals the mechanism: CNN-GRU
+converges to $88$--$91\%$ training accuracy without saturating,
+while Widar\_LeNet saturates at $100\%$ before epoch~20.
+The recurrent parameters of the GRU require more labeled examples
+to train effectively, making the architecture less data-efficient
+under the 25\%-label constraint.
+At 100\% labels the gap narrows to $5.2$ points, consistent with
+CNN-GRU's greater data hunger.
+Notably, CNN-GRU trains $11\times$ faster than Widar\_LeNet
+(12.7~min vs.\ 144.8~min for all three folds), owing to the lighter
+per-frame CNN encoder.
 
-The 100\%-label result ($79.15\%$) remains $10.6$ points below the
-Widar3.0 TPAMI reference (89.7\%), consistent with the architectural
-differences between the two systems (CNN-5 vs.\ BVP-feature SVM in the
-original paper).
-The inter-fold variance ($\pm 8.19\%$) mirrors the pattern observed for
-BVP+SVM, driven again by the Classroom fold's extreme train/test size
-asymmetry.
+\subsubsection*{Summary and implications for PI-SSL}
+Three consistent patterns emerge from the supervised baseline
+results:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Fold asymmetry.} Every method suffers a $15$--$20$
+  point accuracy drop on Fold~1 (Classroom) relative to Folds~0
+  and~2, driven by the LORO protocol's train/test size imbalance.
+  This is a property of the benchmark, not of any model; we surface
+  it explicitly because it dominates reported standard deviations.
+  \item \textbf{Label-efficiency gap.} Reducing labels from 100\% to
+  25\% costs $6$--$10$ accuracy points for every architecture, with
+  the gap widening for architecturally more complex models.
+  \item \textbf{Supervised ceiling.} The best supervised baseline with
+  100\% labels ($79.15\%$) falls $10.6$ points below the Widar3.0
+  TPAMI reference of $89.7\%$, confirming that the cross-room domain
+  gap cannot be closed by architecture choice alone.
+\end{enumerate}
 
-\subsubsection*{Widar\_CNN-GRU baseline}
-The Widar\_CNN-GRU architecture from SenseFi~\cite{ma2023sensefi},
-adapted to $T{=}20$ with the final \texttt{Softmax} layer removed for
-compatibility with \texttt{CrossEntropyLoss}, achieves $66.28 \pm 9.09\%$
-with 25\% labels and $73.97 \pm 7.19\%$ with 100\% labels.
+These findings directly motivate PI-SSL: the domain gap requires
+learning representations that are invariant to room-specific factors,
+and the label-efficiency gap requires leveraging the large unlabeled
+corpus --- both of which are addressed by physics-informed SSL
+pre-training.
 
-Contrary to expectation, CNN-GRU underperforms Widar\_LeNet by $2.9$
-percentage points at 25\% labels, despite adding explicit temporal
-modelling via the GRU layer.
-Inspection of the training curves reveals the reason: CNN-GRU training
-accuracy converges to $\sim\!88$--$91\%$ (never fully saturating), while
-Widar\_LeNet reaches 100\% training accuracy before epoch~20.
-The GRU introduces additional parameters that require more labeled
-examples to tune, making the architecture less data-efficient in the
-low-annotation regime.
-At 100\% labels the gap narrows to $5.2$ points ($73.97\%$ vs
-$79.15\%$), suggesting that CNN-GRU benefits more from additional data.
-CNN-GRU also trains $11\times$ faster than Widar\_LeNet
-(12.7~min vs.\ 144.8~min for all three folds), making it practical for
-rapid experimentation.
+\subsection{PI-SSL Results}
+\label{sec:experiments:pissl}
 
-\subsubsection*{Supervised baseline summary}
-Table~\ref{tab:results} reveals three consistent patterns across all
-supervised baselines:
-(i)~every method suffers a $15$--$20$ percentage point accuracy drop on
-Fold~1 (Classroom) relative to Folds~0 and~2, driven by the severe
-train/test size asymmetry in that fold;
-(ii)~increasing labeled data from 25\% to 100\% yields
-$+6$--$10$ points for all architectures, indicating that label
-efficiency is a genuine bottleneck;
-(iii)~no supervised baseline approaches the Widar3.0 TPAMI reference
-of 89.7\%, even with 100\% labels, confirming that the domain gap
-between training and test rooms requires more than additional labeled
-data alone.
-These observations motivate PI-SSL's dual strategy: physics-informed
-SSL pre-training to bridge the domain gap, and efficient fine-tuning to
-exploit the limited labeled set.
+\todo{Report per-fold accuracy, mean, and standard deviation for
+PI-SSL and SimCLR+fine-tune once training is complete. Fill the
+corresponding rows in Table~\ref{tab:results}.}
 
 \subsection{Ablation Study}
 \label{sec:experiments:ablation}
 
-[To be completed.]
+\todo{Report ablation results studying the contribution of each
+component: (i)~SSL pre-training with generic augmentations only,
+no physics grounding; (ii)~physics-informed augmentations applied
+during supervised training only, no SSL pre-training; (iii)~full
+PI-SSL combining physics-informed SSL pre-training with supervised
+fine-tuning.}
 
 % =============================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 % =============================================================================
 
-[To be completed.]
+We have presented PI-SSL, a physics-informed self-supervised learning
+framework for cross-domain Wi-Fi gesture recognition.
+A comprehensive supervised baseline evaluation on the Widar3.0 dataset
+under the 3-fold LORO protocol with 25\% labeled data establishes
+three empirical findings: the best supervised baseline achieves
+$69.14\%$ mean accuracy, leaving a gap of more than 20 points below
+the state-of-the-art obtained with 100\% labels; severe overfitting
+under the 25\%-label regime is the dominant failure mode for all
+neural-network baselines; and the Classroom fold's structural
+train/test asymmetry drives inter-fold variance across all methods.
+PI-SSL addresses these challenges by pre-training a shared encoder
+over the full unlabeled BVP corpus using physics-informed contrastive
+objectives before supervised fine-tuning on the limited labeled set.
+
+\todo{Complete once PI-SSL results are available: report final
+accuracy, compare to baselines and state-of-the-art, discuss which
+gesture classes benefit most, and state limitations and future work.}
 
 % =============================================================================
 % References
@@ -493,6 +847,12 @@ H.~Yang \textit{et al.},
 ``ARC-Fi: Adaptive and Robust Cross-Environment Wi-Fi Sensing via
 Semi-Supervised Contrastive Learning,''
 \emph{arXiv preprint arXiv:2310.06328}, Oct.\ 2023.
+
+\bibitem{chen2020simclr}
+T.~Chen, S.~Kornblith, M.~Norouzi, and G.~Hinton,
+``A Simple Framework for Contrastive Self-Supervised Learning,''
+in \emph{Proc. 37th Int. Conf. Machine Learning (ICML)},
+Virtual, Jul.\ 2020, pp.~1597--1607.
 
 \end{thebibliography}
 
