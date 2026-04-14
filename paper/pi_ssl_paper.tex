@@ -30,6 +30,7 @@
 \usepackage{cite}
 \usepackage{array}
 \usepackage{tabularx}
+\usepackage{makecell}
 
 % ── Convenience macros ────────────────────────────────────────────────────────
 \newcommand{\bvp}{\mathbf{X}}
@@ -327,7 +328,135 @@ We compare PI-SSL against three published systems:
 \subsection{Results}
 \label{sec:experiments:results}
 
-[To be completed after training runs.]
+Table~\ref{tab:results} reports per-fold and mean classification accuracy
+for all baselines under the 3-fold LORO protocol with 25\% labeled data.
+Rows marked with $\dagger$ show the same method trained on 100\% labels,
+providing an internal upper bound for each architecture.
+
+\begin{table}[t]
+  \centering
+  \caption{Classification accuracy (\%) on Widar3.0 standard-6 gestures,
+           3-fold LORO. \textbf{PI-SSL uses only 25\% of labels};
+           $\dagger$ denotes the same method with 100\% labels for
+           reference. Best 25\%-label result in \textbf{bold}.}
+  \label{tab:results}
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    \textbf{Method} &
+    \makecell{\textbf{Fold 0}\\\textit{Office}} &
+    \makecell{\textbf{Fold 1}\\\textit{Classroom}} &
+    \makecell{\textbf{Fold 2}\\\textit{Hall}} &
+    \textbf{Mean $\pm$ Std} \\
+    \midrule
+    \multicolumn{5}{@{}l}{\textit{Supervised upper bounds (100\% labels)}} \\
+    BVP+SVM$^\dagger$           & 77.36 & 58.69 & 71.05 & 69.03 $\pm$ 7.76 \\
+    Widar\_LeNet$^\dagger$~\cite{ma2023sensefi}    & 85.58 & 68.74 & 83.14 & 79.15 $\pm$ 7.43 \\
+    Widar\_CNN-GRU$^\dagger$~\cite{ma2023sensefi}  & 79.87 & 63.84 & 78.20 & 73.97 $\pm$ 7.19 \\
+    Widar3.0 TPAMI~\cite{zheng2019widar3}$^*$      & \multicolumn{3}{c}{---} & 89.70 \\
+    \midrule
+    \multicolumn{5}{@{}l}{\textit{Baselines (25\% labels)}} \\
+    BVP+SVM (ours)              & 73.29 & 51.62 & 62.87 & 62.59 $\pm$ 8.85 \\
+    Widar\_LeNet~\cite{ma2023sensefi}    & 75.46 & 57.58 & 74.39 & 69.14 $\pm$ 8.19 \\
+    Widar\_CNN-GRU~\cite{ma2023sensefi}  & 74.72 & 53.67 & 70.46 & 66.28 $\pm$ 9.09 \\
+    SimCLR + fine-tune          & -- & -- & -- & -- \\
+    \midrule
+    \textbf{PI-SSL (ours)}      & -- & -- & -- & \textbf{--} \\
+    \bottomrule
+    \multicolumn{5}{@{}l}{\footnotesize $^*$Different feature extraction
+      and evaluation setup; not directly comparable (see text).} \\
+  \end{tabular}
+\end{table}
+
+\subsubsection*{SVM baseline}
+The BVP+SVM baseline achieves a mean accuracy of $62.59 \pm 8.85\%$
+with 25\% labeled data and $69.03 \pm 7.76\%$ with 100\% labels.
+The large inter-fold variance reflects a structural asymmetry in the
+LORO protocol: Fold~1 (Classroom) provides only 2{,}155 labeled training
+samples against 16{,}396 test samples, while Fold~0 (Office) reverses
+this ratio (5{,}505 training, 2{,}995 test), yielding an 21.7-point
+accuracy spread across folds.
+The Classroom fold consistently produces the lowest accuracy across all
+methods, making it the dominant contributor to variance.
+
+We note that our SVM operates on the raw flattened BVP volume
+($20 \times 20 \times 20 \to 8{,}000$-dim) with an RBF kernel
+($C = 10$, $\gamma = \texttt{scale}$), whereas the Widar3.0 TPAMI
+paper~\cite{zheng2019widar3} reports 89.7\% using hand-crafted BVP
+statistics under a different train/test split.
+These results are therefore not directly comparable; our SVM serves as
+an internal reference for the label-efficiency gap and a lower bound
+for the supervised fine-tuning baselines.
+
+Per-gesture accuracy averaged across folds (25\% labels) shows that
+\textsc{Clap} is the most distinguishable class (77.94\%), while
+\textsc{Draw-O-H} (44.29\%) and \textsc{Slide} (46.85\%) are the most
+challenging, consistent with the fine-grained spatial trajectories of
+those gestures.
+We expect physics-informed representations to yield the greatest gains
+on these two hard classes.
+
+\subsubsection*{Widar\_LeNet baseline}
+The Widar\_LeNet (CNN-5) architecture from SenseFi~\cite{ma2023sensefi},
+adapted to our $T{=}20$ input, achieves $69.14 \pm 8.19\%$ with 25\%
+labels and $79.15 \pm 7.43\%$ with 100\% labels — an improvement of
+$+6.6$ and $+10.1$ percentage points over BVP+SVM respectively.
+This confirms that convolutional feature extraction over the
+spatial--velocity dimensions is substantially more informative than
+flattened BVP vectors for cross-room generalisation.
+
+A notable observation is that training accuracy reaches 100\% before
+epoch~20 for all folds, yet test accuracy plateaus between 57\% and
+75\%, indicating severe overfitting under the 25\%-label regime.
+This overfitting gap motivates the use of unlabeled data via
+self-supervised pre-training: PI-SSL leverages the full unlabeled pool
+to learn a more general representation before supervised fine-tuning.
+
+The 100\%-label result ($79.15\%$) remains $10.6$ points below the
+Widar3.0 TPAMI reference (89.7\%), consistent with the architectural
+differences between the two systems (CNN-5 vs.\ BVP-feature SVM in the
+original paper).
+The inter-fold variance ($\pm 8.19\%$) mirrors the pattern observed for
+BVP+SVM, driven again by the Classroom fold's extreme train/test size
+asymmetry.
+
+\subsubsection*{Widar\_CNN-GRU baseline}
+The Widar\_CNN-GRU architecture from SenseFi~\cite{ma2023sensefi},
+adapted to $T{=}20$ with the final \texttt{Softmax} layer removed for
+compatibility with \texttt{CrossEntropyLoss}, achieves $66.28 \pm 9.09\%$
+with 25\% labels and $73.97 \pm 7.19\%$ with 100\% labels.
+
+Contrary to expectation, CNN-GRU underperforms Widar\_LeNet by $2.9$
+percentage points at 25\% labels, despite adding explicit temporal
+modelling via the GRU layer.
+Inspection of the training curves reveals the reason: CNN-GRU training
+accuracy converges to $\sim\!88$--$91\%$ (never fully saturating), while
+Widar\_LeNet reaches 100\% training accuracy before epoch~20.
+The GRU introduces additional parameters that require more labeled
+examples to tune, making the architecture less data-efficient in the
+low-annotation regime.
+At 100\% labels the gap narrows to $5.2$ points ($73.97\%$ vs
+$79.15\%$), suggesting that CNN-GRU benefits more from additional data.
+CNN-GRU also trains $11\times$ faster than Widar\_LeNet
+(12.7~min vs.\ 144.8~min for all three folds), making it practical for
+rapid experimentation.
+
+\subsubsection*{Supervised baseline summary}
+Table~\ref{tab:results} reveals three consistent patterns across all
+supervised baselines:
+(i)~every method suffers a $15$--$20$ percentage point accuracy drop on
+Fold~1 (Classroom) relative to Folds~0 and~2, driven by the severe
+train/test size asymmetry in that fold;
+(ii)~increasing labeled data from 25\% to 100\% yields
+$+6$--$10$ points for all architectures, indicating that label
+efficiency is a genuine bottleneck;
+(iii)~no supervised baseline approaches the Widar3.0 TPAMI reference
+of 89.7\%, even with 100\% labels, confirming that the domain gap
+between training and test rooms requires more than additional labeled
+data alone.
+These observations motivate PI-SSL's dual strategy: physics-informed
+SSL pre-training to bridge the domain gap, and efficient fine-tuning to
+exploit the limited labeled set.
 
 \subsection{Ablation Study}
 \label{sec:experiments:ablation}
