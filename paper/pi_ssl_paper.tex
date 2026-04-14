@@ -79,12 +79,14 @@ that exploits the physics of BVP formation as a self-supervisory
 signal to learn domain-invariant representations from unlabeled data.
 Through a rigorous supervised baseline study under the same LORO
 protocol with only 25\% of labels, we establish that the best
-supervised baseline (Widar\_LeNet from SenseFi) achieves
-$68.12 \pm 7.59\%$ mean accuracy --- a gap of more than 20 percentage
-points below the 89.7\% supervised target.
-PI-SSL addresses this gap by pre-training a shared encoder over the
-full unlabeled BVP corpus before fine-tuning on the limited labeled
-set, achieving \todo{XX.XX\%} mean accuracy with 25\% labels.
+supervised baseline (Widar\_LeNet) achieves $68.12 \pm 7.59\%$ ---
+a gap of 9.8 points below the same architecture trained with 100\%
+labels ($77.93\%$) under identical conditions.
+PI-SSL addresses this label-efficiency gap by pre-training a shared
+encoder over the full unlabeled BVP corpus before fine-tuning on
+the limited labeled set, achieving \todo{XX.XX\%} mean accuracy
+with 25\% labels and closing the gap toward the 100\%-label
+supervised ceiling.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -146,8 +148,9 @@ environments, requiring substantial data collection effort.
 In realistic deployment scenarios, only a fraction of recorded data may
 be accompanied by verified labels, while the remainder is unannotated.
 We therefore study the \emph{label-efficiency problem}: given only
-25\% of the available labeled training data, can a model match or
-exceed the $89.7\%$ supervised baseline that requires all labels?
+25\% of the available labeled training data, can a model approach
+the performance of fully-supervised training under the same
+evaluation protocol, without requiring the full labeled corpus?
 
 To close this gap, we propose PI-SSL
 (\textbf{P}hysics-\textbf{I}nformed \textbf{S}elf-\textbf{S}upervised
@@ -195,9 +198,9 @@ The contributions of this paper are as follows:
 
   \item \textbf{Label-efficient cross-room recognition.}
   PI-SSL achieves \todo{XX.XX\%} mean accuracy under the standard-6
-  LORO benchmark using only 25\% of labels, targeting the
-  fully-supervised state-of-the-art of 89.7\%~\cite{zheng2019widar3}
-  that requires 100\% labels.
+  LORO benchmark using only 25\% of labels, closing the
+  label-efficiency gap toward the 100\%-label supervised ceiling of
+  $77.93\%$ established by Widar\_LeNet under the same LORO protocol.
 
 \end{itemize}
 
@@ -615,9 +618,12 @@ to ensure full reproducibility.
 \subsubsection*{Evaluation metric}
 Performance is reported as per-fold top-1 classification accuracy
 and mean accuracy $\pm$ standard deviation across the three folds.
-The target for PI-SSL is ${>}89.5\%$ mean accuracy --- exceeding the
-Widar3.0 supervised reference of $89.7\%$~\cite{zheng2019widar3}
-while using only 25\% of the available labels.
+The goal for PI-SSL is to close the label-efficiency gap: with 25\%
+labels, PI-SSL should approach the 100\%-label supervised ceiling of
+$77.93\%$ (Widar\_LeNet, same LORO protocol).
+Note that the Widar3.0 TPAMI reference of $89.7\%$ uses hand-crafted
+BVP statistics and a different evaluation setup and is therefore not
+a direct comparison target for our raw-BVP LORO experiments.
 
 \subsubsection*{Baselines}
 Three baseline systems are evaluated under the 25\%-label LORO
@@ -817,15 +823,17 @@ We have presented PI-SSL, a physics-informed self-supervised learning
 framework for cross-domain Wi-Fi gesture recognition.
 A comprehensive supervised baseline evaluation on the Widar3.0 dataset
 under the 3-fold LORO protocol with 25\% labeled data establishes
-three empirical findings: the best supervised baseline achieves
-$68.12\%$ mean accuracy, leaving a gap of more than 20 points below
-the state-of-the-art obtained with 100\% labels; severe overfitting
-under the 25\%-label regime is the dominant failure mode for all
-neural-network baselines; and the Classroom fold's structural
-train/test asymmetry drives inter-fold variance across all methods.
+three empirical findings: the best supervised baseline with 25\%
+labels achieves $68.12\%$ mean accuracy, a gap of 9.8 points below
+the same architecture trained with 100\% labels ($77.93\%$) under
+identical conditions; severe overfitting under the 25\%-label regime
+is the dominant failure mode for all neural-network baselines; and
+the Classroom fold's structural train/test asymmetry drives
+inter-fold variance across all methods.
 PI-SSL addresses these challenges by pre-training a shared encoder
 over the full unlabeled BVP corpus using physics-informed contrastive
-objectives before supervised fine-tuning on the limited labeled set.
+objectives before supervised fine-tuning on the limited labeled set,
+with the goal of closing this 9.8-point label-efficiency gap.
 
 \todo{Complete once PI-SSL results are available: report final
 accuracy, compare to baselines and state-of-the-art, discuss which
